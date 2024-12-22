@@ -1,5 +1,6 @@
 package org.example;
 
+import io.github.bonigarcia.wdm.WebDriverManager;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
@@ -9,9 +10,9 @@ import org.openqa.selenium.chrome.ChromeDriver;
 import org.openqa.selenium.chrome.ChromeOptions;
 import org.openqa.selenium.support.ui.ExpectedConditions;
 import org.openqa.selenium.support.ui.WebDriverWait;
+import javax.swing.*;
 import java.io.*;
 import java.net.HttpURLConnection;
-import java.net.URISyntaxException;
 import java.net.URL;
 import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
@@ -23,26 +24,39 @@ import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 
 public class Main {
-    private static WebDriver classDriver;
+    private WebDriver classDriver;
     private static final int NUMBER_OF_THREADS = 5;
     private String name;
     private String saveLocation;
+    private List<WebElement> links = null;
+    private List<WebElement> viewList = null;
+    public Main(){
 
-    public Main(String name, String saveLocation) {
+    }
+
+    public void setName(String name) {
         this.name = name;
+    }
+    public String getName(){
+        return this.name;
+    }
+    public List<WebElement> getViewList(){
+        return this.viewList;
+    }
+    public void setSaveLocation(String saveLocation) {
         this.saveLocation = saveLocation;
     }
 
+    public void setClassDriver(Boolean isHeadlessMode) {
+        this.classDriver = newDriver(isHeadlessMode);
+    }
 
-    private static WebDriver newDriver(Boolean isHeadlessMode) throws URISyntaxException {
-        // Load chromedriver from the resources directory
-        String driverPath = new File(Main.class.getClassLoader().getResource("chromedriver.exe").toURI()).getPath();
-
-// Set the system property for the ChromeDriver
-        System.setProperty("webdriver.chrome.driver", driverPath);
+    private WebDriver newDriver(Boolean isHeadlessMode) {
+        WebDriverManager.chromedriver().setup();
         // Create ChromeOptions object to configure the browser
         ChromeOptions options = new ChromeOptions();
         if(isHeadlessMode){
@@ -64,7 +78,7 @@ public class Main {
 
         return webDriver;
     }
-    public void main(List<WebElement> links) throws IOException, InterruptedException, URISyntaxException {
+    public void main(double downloadOption, JProgressBar progressBar) throws IOException, InterruptedException {
         File newDir = new File(saveLocation + "\\" + name);
         if (!newDir.exists()) {
             newDir.mkdirs();  // Creates the directory if it doesn't exist
@@ -73,26 +87,31 @@ public class Main {
         FileWriter error = new FileWriter(errorFile);
         File downloadedFile = new File(newDir,  "downloaded.txt");
         FileWriter downloaded = new FileWriter(downloadedFile);
-        // driver.findElement(By.xpath("//div[@class='TUXSegmentedControl-itemTitle' and text()='Popular']")).click();
-        if(classDriver == null || links == null){
+        if(classDriver == null){
             classDriver = newDriver(true);
             classDriver.get("https://www.tiktok.com/@" + name);
-            links = getTotalVideos();
+            Thread.sleep(5000);
+            scanVideo(null);
         }
-        int total = links.size();
-        List<WebElement> viewList = classDriver.findElements(By.cssSelector("strong[data-e2e]"));
+        int total = getTotalDownloadVideos(downloadOption);
+
+        System.out.println("total videos: " + total);
+        Thread.sleep(2000);
         List<VideoInfo> info = new ArrayList<>();
         ExecutorService executor = Executors.newFixedThreadPool(NUMBER_OF_THREADS);
-
+        AtomicInteger done = new AtomicInteger(0);
         for (int i = 0; i < total; i++) {
             String href = links.get(i).getAttribute("href");
             String view = viewList.get(i).getText();
             System.out.println(view);
-            int index = i+1; // Capture the current index
+            int index = i+1;
             System.out.println(href);
+            double finalTotal = total;
             executor.submit(() -> {
                 try {
                     processDownloadVideo(info, href, index, newDir, view, error, downloaded);
+                    int completed = done.incrementAndGet();
+                    progressBar.setValue((int) (completed * 100 / finalTotal));
                 } catch (InterruptedException e) {
                     throw new RuntimeException(e);
                 } catch (IOException e) {
@@ -111,29 +130,73 @@ public class Main {
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
-        Collections.sort(info, Comparator.comparing(VideoInfo :: getFilename));
+        // sort by views
+        Collections.sort(info,Comparator.comparing((VideoInfo v) -> extractNumber(v.getView())).reversed());
         exportExcel(info);
         System.out.println("done");
         classDriver.quit();
     }
-    public static void openAndSolveCaptcha(String username) throws URISyntaxException {
-        classDriver = newDriver(false);
-        classDriver.get("https://www.tiktok.com/@" + username);
-        classDriver.navigate().refresh();
-        classDriver.navigate().refresh();
-        classDriver.navigate().refresh();
+    private int extractNumber(String view) {
+        try {
+            if (view.endsWith("K")) {
+                return (int) (Double.parseDouble(view.substring(0, view.length() - 1)) * 1000);
+            } else if (view.endsWith("M")) {
+                return (int) (Double.parseDouble(view.substring(0, view.length() - 1)) * 1000000);
+            } else {
+                return Integer.parseInt(view);
+            }
+        } catch (NumberFormatException e) {
+            System.err.println("Error parsing view at : " + view);
+            return 0;
+        }
+    }
+    public int getTotalDownloadVideos(double downloadOption){
+        double total = links.size();
+        if(downloadOption <= 1){
+            total = Math.ceil(total * downloadOption);
+        } else if(downloadOption < total){
+            total = downloadOption;
+        }
+        return (int) total;
+    }
+
+    public void openAndSolveCaptcha(String sortOption) {
+        classDriver.get("https://www.tiktok.com/@" + name);
+        WebDriverWait wait = new WebDriverWait(classDriver, Duration.ofSeconds(5));
+        if(sortOption.equals("popular")){
+            wait.until(ExpectedConditions.presenceOfElementLocated(By.xpath("//div[@class='TUXSegmentedControl-itemTitle' and text()='Popular']"))).click();
+        } else if(sortOption.equals("latest")){
+            wait.until(ExpectedConditions.presenceOfElementLocated(By.xpath("//div[@class='TUXSegmentedControl-itemTitle' and text()='Latest']"))).click();
+        } else{
+            wait.until(ExpectedConditions.presenceOfElementLocated(By.xpath("//div[@class='TUXSegmentedControl-itemTitle' and text()='Oldest']"))).click();
+        }
+        try {
+            Thread.sleep(2000);
+            ((JavascriptExecutor) classDriver).executeScript("window.scrollBy(0, document.body.scrollHeight);");
+            Thread.sleep(2000);
+            ((JavascriptExecutor) classDriver).executeScript("window.scrollBy(0, document.body.scrollHeight);");
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
+
         // solve the captcha by rice :)
     }
-    public static List<WebElement> getTotalVideos(){
+    public void scanVideo(JLabel totalVideoLabel){
+        if(classDriver == null){
+            return;
+        }
         try {
+            links = classDriver.findElements(By.xpath("//div[contains(@class, 'css-13fa1gi-DivWrapper') and contains(@class, 'e1cg0wnj1')]//a"));
+            viewList = classDriver.findElements(By.cssSelector("strong[data-e2e='video-views']"));
             long lastHeight = (long) ((JavascriptExecutor) classDriver).executeScript("return document.body.scrollHeight");
-            while (true) {
-                // Scroll down
+            while (GUI.isScanning) {
+                totalVideoLabel.setText("Total Videos: " + links.size());
                 ((JavascriptExecutor) classDriver).executeScript("window.scrollBy(0, document.body.scrollHeight);");
 
                 // Wait for content to load
-                Thread.sleep(1000); // Adjust delay if needed
-
+                Thread.sleep(1500); // Adjust delay if needed
+                links = classDriver.findElements(By.xpath("//div[contains(@class, 'css-13fa1gi-DivWrapper') and contains(@class, 'e1cg0wnj1')]//a"));
+                viewList = classDriver.findElements(By.cssSelector("strong[data-e2e='video-views']"));
                 // Get the new height
                 long newHeight = (long) ((JavascriptExecutor) classDriver).executeScript("return document.body.scrollHeight");
                 System.out.println("New Height: " + newHeight);
@@ -145,17 +208,15 @@ public class Main {
                 }
                 lastHeight = newHeight;
             }
-        } catch (InterruptedException e) {
-            // Handle the exception
+        } catch (Exception e) {
             Thread.currentThread().interrupt(); // Restore interrupt status
             e.printStackTrace();
         }
-        List<WebElement> links = classDriver.findElements(By.xpath("//div[contains(@class, 'css-13fa1gi-DivWrapper') and contains(@class, 'e1cg0wnj1')]//a"));
         if(links.isEmpty()){
             System.out.println("can't find");
         }
-        return links;
     }
+
 
     private void processDownloadVideo(List<VideoInfo> info, String href, int count, File newDir, String view, FileWriter error, FileWriter dowloaded) throws InterruptedException, IOException {
         if (href.isBlank()) {
@@ -223,10 +284,16 @@ public class Main {
         writer.flush();
     }
     private VideoInfo createInfo(WebDriver driver, String fileName, String link, String view){
-        WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(3));
-        WebElement musicElement = wait.until(ExpectedConditions.presenceOfElementLocated(By.cssSelector(".css-pvx3oa-DivMusicText.epjbyn3")));
-        String music = musicElement.getText();
         String hashtags = "";
+        String music = "";
+        try{
+            WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(5));
+            WebElement musicElement = wait.until(ExpectedConditions.presenceOfElementLocated(
+                    By.cssSelector(".css-pvx3oa-DivMusicText.epjbyn3")));
+            music = musicElement.getText();
+        } catch (Exception me){
+            System.out.println("can't located music element");
+        }
         List<WebElement> hashtagElement = driver.findElements(By.cssSelector("a.css-sbcvet-StyledCommonLink strong"));
         if(hashtagElement.isEmpty()){
             hashtagElement = driver.findElements(By.cssSelector("a.css-sbcvet-StyledCommonLink strong"));
@@ -357,39 +424,4 @@ public class Main {
             e.printStackTrace();
         }
     }
-    /*public String getJsonString(String filename)throws IOException, InterruptedException {
-        // Load cookies from JSON file located in resources folder
-        InputStream inputStream = Main.class.getClassLoader().getResourceAsStream(filename);
-
-        if (inputStream == null) {
-            System.out.println("file not found");
-            return "";
-        }
-
-        BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream));
-        StringBuilder stringBuilder = new StringBuilder();
-        String line;
-
-        while ((line = reader.readLine()) != null) {
-            stringBuilder.append(line);
-        }
-        reader.close();
-
-        String jsonContent = stringBuilder.toString();
-        return jsonContent;
-    }
-    public void addCookiesToDriver(WebDriver driver) throws IOException, InterruptedException {
-        JSONArray cookiesArray = new JSONArray(getJsonString("cookies.json"));
-
-        // Add cookies to the WebDriver
-        for (int i = 0; i < cookiesArray.length(); i++) {
-            JSONObject cookieJson = cookiesArray.getJSONObject(i);
-            String name = cookieJson.getString("name");
-            String value = cookieJson.getString("value");
-
-            // Create a Selenium Cookie object
-            Cookie cookie = new Cookie(name, value);
-            driver.manage().addCookie(cookie);
-        }
-    }*/
 }
