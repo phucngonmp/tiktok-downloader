@@ -4,6 +4,8 @@ import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
 
 import javax.swing.*;
+import javax.swing.event.ChangeEvent;
+import javax.swing.event.ChangeListener;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
@@ -27,13 +29,15 @@ public class GUI {
     private static JTextField locationTextField = new JTextField();
     private static JLabel totalVideosLabel = new JLabel("Total Videos:");
     private static JLabel downloadVideoLabel = new JLabel("Download Videos:");
+    private static JSpinner spinner = new JSpinner(new SpinnerNumberModel(5, 1, 15, 1));
+    private static JProgressBar progressBar = new JProgressBar(0, 100);
 
     public static void main(String[] args) {
-        JFrame frame = new JFrame("Tiktok downloader");
+        JFrame frame = new JFrame("Tiktok Downloader");
         Main main = new Main();
 
         // Set the size of the JFrame
-        frame.setSize(600, 400);
+        frame.setSize(600, 500);
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         frame.setLocationRelativeTo(null);
         frame.setResizable(false);
@@ -41,37 +45,48 @@ public class GUI {
         // Set layout manager
         frame.setLayout(null);
 
-        // Username label and text field
+        JLabel note = new JLabel("Thread: ");
+        note.setBounds(50, 20, 250, 30);
+        spinner.setBounds(150, 20, 35, 30);
+        JComponent editor = spinner.getEditor();
+        JTextField textField = ((JSpinner.DefaultEditor) editor).getTextField();
+        textField.setEditable(false);
+        JButton resetButton = new JButton("reset");
+        resetButton.setBounds(450, 20, 100, 30);
+
         JLabel usernameLabel = new JLabel("Username:");
-        usernameLabel.setBounds(50, 20, 100, 30);
-        usernameTextField.setBounds(150, 20, 150, 30);
-        // Sort label and dropdown
-        JLabel downloadOptionLabel = new JLabel("Option: ");
-        downloadOptionLabel.setBounds(50, 140, 100, 30);
-        downloadOptionJComboBox.setBounds(150, 140, 150, 30);
-        // Sort label and dropdown
+        usernameLabel.setBounds(50, 80, 100, 30);
+        usernameTextField.setBounds(150, 80, 250, 30);
         JLabel sortLabel = new JLabel("Sort: ");
-        sortLabel.setBounds(50, 60, 100, 30);
-        sortDropdown.setBounds(150, 60, 150, 30);
-        JLabel note = new JLabel("if videos download < 35, just click download");
-        note.setFont(new Font("Arial", Font.ITALIC, 11));
-        note.setBounds(320, 20, 250, 30);
-        openURL.setBounds(320, 60, 120, 30);
-        JLabel captchaLabel = new JLabel("Scan : ");
-        captchaLabel.setBounds(50, 100, 100, 30);
-        totalVideosLabel.setBounds(320, 100, 200, 30);
-        downloadVideoLabel.setBounds(320, 140, 200, 30);
-        scanButton.setBounds(150, 100, 150, 30);
+        sortLabel.setBounds(50, 120, 100, 30);
+        sortDropdown.setBounds(150, 120, 150, 30);
+        openURL.setBounds(320, 120, 120, 30);
+
+        scanButton.setBounds(150, 180, 150, 30);
+        totalVideosLabel.setBounds(320, 180, 200, 30);
+
+
+        JLabel downloadOptionLabel = new JLabel("Option: ");
+        downloadOptionLabel.setBounds(50, 240, 100, 30);
+        downloadOptionJComboBox.setBounds(150, 240, 150, 30);
+        downloadVideoLabel.setBounds(320, 240, 200, 30);
         JLabel locationLabel = new JLabel("Save Location:");
-        locationLabel.setBounds(50, 200, 100, 30);
-        locationTextField.setBounds(150, 200, 250, 30);
-        browseButton.setBounds(410, 200, 80, 30);
-        JProgressBar progressBar = new JProgressBar(0, 100); // Minimum 0, Maximum 100
+        locationLabel.setBounds(50, 280, 100, 30);
+        locationTextField.setBounds(150, 280, 250, 30);
+        browseButton.setBounds(410, 280, 80, 30);
+        downloadButton.setBounds(250, 340, 100, 30);
+
         progressBar.setStringPainted(true);
-        progressBar.setBounds(50, 300, 500, 20);
-        downloadButton.setBounds(250, 250, 100, 30);
+        progressBar.setBounds(50, 400, 500, 20);
 
 
+        spinner.addChangeListener(new ChangeListener() {
+            @Override
+            public void stateChanged(ChangeEvent e) {
+                int threads = (int) spinner.getValue();
+                main.setThreads(threads);
+            }
+        });
         openURL.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
@@ -172,17 +187,23 @@ public class GUI {
                             isOpenAndSolvedCaptcha = false;
                             setEnable(true);
                             JOptionPane.showMessageDialog(frame, "Process complete!");
-                            reset();
+                            reset(main);
                         }
                     };
                     worker.execute();
                 }
             }
         });
-
+        resetButton.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                reset(main);
+            }
+        });
 
         // Add components to the frame
-
+        frame.add(resetButton);
+        frame.add(spinner);
         frame.add(note);
         frame.add(downloadVideoLabel);
         frame.add(usernameLabel);
@@ -192,7 +213,6 @@ public class GUI {
         frame.add(downloadOptionJComboBox);
         frame.add(sortLabel);
         frame.add(sortDropdown);
-        frame.add(captchaLabel);
         frame.add(totalVideosLabel);
         frame.add(locationLabel);
         frame.add(locationTextField);
@@ -203,11 +223,17 @@ public class GUI {
         // Make the frame visible
         frame.setVisible(true);
     }
-    private static void reset(){
+    private static void reset(Main main){
         usernameTextField.setText("");
         totalVideosLabel.setText("Total Videos: ");
         downloadVideoLabel.setText("Download Videos: ");
         locationTextField.setText("");
+        progressBar.setValue(0);
+        isScanning = false;
+        isDownloading = false;
+        isOpenAndSolvedCaptcha = false;
+        setEnable(true);
+        main.reset();
     }
 
 
@@ -221,6 +247,7 @@ public class GUI {
         downloadButton.setEnabled(isEnable);
         locationTextField.setEnabled(isEnable);
         downloadOptionJComboBox.setEnabled(isEnable);
+        spinner.setEnabled(!isDownloading);
     }
 
     private static String getSortType(){

@@ -29,7 +29,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 public class Main {
     private WebDriver classDriver;
-    private static final int NUMBER_OF_THREADS = 5;
+    private int threads = 5;
     private String name;
     private String saveLocation;
     private List<WebElement> links = null;
@@ -50,9 +50,16 @@ public class Main {
     public void setSaveLocation(String saveLocation) {
         this.saveLocation = saveLocation;
     }
-
     public void setClassDriver(Boolean isHeadlessMode) {
         this.classDriver = newDriver(isHeadlessMode);
+    }
+    public void setThreads(int threads){this.threads = threads;}
+    public void reset(){
+        name = null;
+        if(classDriver != null){
+            classDriver.quit();
+            classDriver = null;
+        }
     }
 
     private WebDriver newDriver(Boolean isHeadlessMode) {
@@ -65,8 +72,8 @@ public class Main {
         // Disable the "AutomationControlled" flag
         options.addArguments("--disable-blink-features=AutomationControlled");
         options.addArguments("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/78.0.3904.97 Safari/537.36");
-        options.addArguments("--disable-gpu");
         options.addArguments("--window-size=1920,1080");
+        options.addArguments("--mute-audio");
         //options.addArguments("--disable-blink-features=AutomationControlled");
         //options.setExperimentalOption("excludeSwitches", new String[]{"enable-automation"});
 
@@ -98,7 +105,7 @@ public class Main {
         System.out.println("total videos: " + total);
         Thread.sleep(2000);
         List<VideoInfo> info = new ArrayList<>();
-        ExecutorService executor = Executors.newFixedThreadPool(NUMBER_OF_THREADS);
+        ExecutorService executor = Executors.newFixedThreadPool(threads);
         AtomicInteger done = new AtomicInteger(0);
         for (int i = 0; i < total; i++) {
             String href = links.get(i).getAttribute("href");
@@ -134,7 +141,10 @@ public class Main {
         Collections.sort(info,Comparator.comparing((VideoInfo v) -> extractNumber(v.getView())).reversed());
         exportExcel(info);
         System.out.println("done");
+        downloaded.close();
+        error.close();
         classDriver.quit();
+        classDriver = null;
     }
     private int extractNumber(String view) {
         try {
