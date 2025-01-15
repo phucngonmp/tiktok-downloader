@@ -170,7 +170,7 @@ public class Main {
         return (int) total;
     }
 
-    public void openAndSolveCaptcha(String sortOption) {
+    public void firstScan(String sortOption) {
         classDriver.get("https://www.tiktok.com/@" + name);
         WebDriverWait wait = new WebDriverWait(classDriver, Duration.ofSeconds(5));
         if(sortOption.equals("popular")){
@@ -180,14 +180,14 @@ public class Main {
         } else{
             wait.until(ExpectedConditions.presenceOfElementLocated(By.xpath("//div[@class='TUXSegmentedControl-itemTitle' and text()='Oldest']"))).click();
         }
-        try {
+        /*try {
             Thread.sleep(2000);
             ((JavascriptExecutor) classDriver).executeScript("window.scrollBy(0, document.body.scrollHeight);");
             Thread.sleep(2000);
             ((JavascriptExecutor) classDriver).executeScript("window.scrollBy(0, document.body.scrollHeight);");
         } catch (InterruptedException e) {
             throw new RuntimeException(e);
-        }
+        }*/
 
         // solve the captcha by rice :)
     }
@@ -196,7 +196,7 @@ public class Main {
             return;
         }
         try {
-            links = classDriver.findElements(By.xpath("//div[contains(@class, 'css-13fa1gi-DivWrapper') and contains(@class, 'e1cg0wnj1')]//a"));
+            links = classDriver.findElements(By.xpath("//div[contains(@class, 'css-1uqux2o-DivItemContainerV2 ') and contains(@class, 'e19c29qe7')]//a"));
             viewList = classDriver.findElements(By.cssSelector("strong[data-e2e='video-views']"));
             long lastHeight = (long) ((JavascriptExecutor) classDriver).executeScript("return document.body.scrollHeight");
             while (GUI.isScanning) {
@@ -205,7 +205,7 @@ public class Main {
 
                 // Wait for content to load
                 Thread.sleep(1500); // Adjust delay if needed
-                links = classDriver.findElements(By.xpath("//div[contains(@class, 'css-13fa1gi-DivWrapper') and contains(@class, 'e1cg0wnj1')]//a"));
+                links = classDriver.findElements(By.xpath("//div[contains(@class, 'css-1uqux2o-DivItemContainerV2 ') and contains(@class, 'e19c29qe7')]//a"));
                 viewList = classDriver.findElements(By.cssSelector("strong[data-e2e='video-views']"));
                 // Get the new height
                 long newHeight = (long) ((JavascriptExecutor) classDriver).executeScript("return document.body.scrollHeight");
@@ -223,7 +223,7 @@ public class Main {
             e.printStackTrace();
         }
         if(links.isEmpty()){
-            System.out.println("can't find");
+            System.out.println("can't find videos");
         }
     }
 

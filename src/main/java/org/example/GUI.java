@@ -16,7 +16,8 @@ import java.util.List;
 public class GUI {
     public static boolean isScanning = false;
     public static boolean isDownloading = false;
-    public static boolean isOpenAndSolvedCaptcha = false;
+    private static boolean isFirstScan = true;
+    //public static boolean isOpenAndSolvedCaptcha = false;
     private static JTextField usernameTextField = new JTextField();
     private static JComboBox<String> downloadOptionJComboBox = new JComboBox<>(new String[]{
             "20 videos", "50 videos", "100 videos", "20%", "50%", "100%"});
@@ -87,21 +88,28 @@ public class GUI {
                 main.setThreads(threads);
             }
         });
-        openURL.addActionListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                if(!usernameTextField.getText().isBlank()) {
-                    isOpenAndSolvedCaptcha = true;
-                    setEnable(true);
-                    main.setClassDriver(false);
-                    main.setName(usernameTextField.getText());
-                    main.openAndSolveCaptcha(getSortType());
-                }
-            }
-        });
+//        openURL.addActionListener(new ActionListener() {
+//            @Override
+//            public void actionPerformed(ActionEvent e) {
+//                if(!usernameTextField.getText().isBlank()) {
+//                    isOpenAndSolvedCaptcha = true;
+//                    setEnable(true);
+//                    main.setClassDriver(true);
+//                    main.setName(usernameTextField.getText());
+//                    main.openAndSolveCaptcha(getSortType());
+//                }
+//            }
+//        });
         scanButton.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
+                if(isFirstScan){
+                    setEnable(true);
+                    main.setClassDriver(true);
+                    main.setName(usernameTextField.getText().trim());
+                    main.firstScan(getSortType());
+                    isFirstScan = false;
+                }
                 if (!isScanning) {
                     scanButton.setText("Stop");
                     isScanning = true;
@@ -161,8 +169,8 @@ public class GUI {
                 if(!usernameTextField.getText().isBlank() && !locationTextField.getText().isBlank()){
                     isDownloading = true;
                     if(main.getName() == null){
-                        main.setName(usernameTextField.getText());
-                        isOpenAndSolvedCaptcha = true;
+                        main.setName(usernameTextField.getText().trim());
+                        isFirstScan = false;
                     }
                     main.setSaveLocation(locationTextField.getText());
                     setEnable(false);
@@ -184,7 +192,7 @@ public class GUI {
                         @Override
                         protected void done() {
                             isDownloading = false;
-                            isOpenAndSolvedCaptcha = false;
+                            isFirstScan = true;
                             setEnable(true);
                             JOptionPane.showMessageDialog(frame, "Process complete!");
                             reset(main);
@@ -208,7 +216,6 @@ public class GUI {
         frame.add(downloadVideoLabel);
         frame.add(usernameLabel);
         frame.add(usernameTextField);
-        frame.add(openURL);
         frame.add(downloadOptionLabel);
         frame.add(downloadOptionJComboBox);
         frame.add(sortLabel);
@@ -231,19 +238,19 @@ public class GUI {
         progressBar.setValue(0);
         isScanning = false;
         isDownloading = false;
-        isOpenAndSolvedCaptcha = false;
+        isFirstScan = true;
         setEnable(true);
         main.reset();
     }
 
 
     private static void setEnable(boolean isEnable){
-        usernameTextField.setEnabled(!isOpenAndSolvedCaptcha);
+        usernameTextField.setEnabled(isFirstScan);
         browseButton.setEnabled(isEnable);
-        openURL.setEnabled(!isOpenAndSolvedCaptcha);
+        openURL.setEnabled(isFirstScan);
         scanButton.setEnabled(!isDownloading);
         downloadButton.setEnabled(!isScanning);
-        sortDropdown.setEnabled(!isOpenAndSolvedCaptcha);
+        sortDropdown.setEnabled(isFirstScan);
         downloadButton.setEnabled(isEnable);
         locationTextField.setEnabled(isEnable);
         downloadOptionJComboBox.setEnabled(isEnable);
