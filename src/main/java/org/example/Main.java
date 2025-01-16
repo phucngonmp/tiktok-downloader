@@ -13,6 +13,7 @@ import org.openqa.selenium.support.ui.WebDriverWait;
 import javax.swing.*;
 import java.io.*;
 import java.net.HttpURLConnection;
+import java.net.SocketTimeoutException;
 import java.net.URL;
 import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
@@ -200,7 +201,6 @@ public class Main {
             viewList = classDriver.findElements(By.cssSelector("strong[data-e2e='video-views']"));
             long lastHeight = (long) ((JavascriptExecutor) classDriver).executeScript("return document.body.scrollHeight");
             while (GUI.isScanning) {
-                totalVideoLabel.setText("Total Videos: " + links.size());
                 ((JavascriptExecutor) classDriver).executeScript("window.scrollBy(0, document.body.scrollHeight);");
 
                 // Wait for content to load
@@ -217,6 +217,7 @@ public class Main {
                     break;
                 }
                 lastHeight = newHeight;
+                totalVideoLabel.setText("Total Videos: " + links.size());
             }
         } catch (Exception e) {
             Thread.currentThread().interrupt(); // Restore interrupt status
@@ -243,17 +244,22 @@ public class Main {
                 WebDriverWait wait = new WebDriverWait(webDriver, Duration.ofSeconds(10));
                 WebElement videoElement = wait.until(ExpectedConditions.presenceOfElementLocated(By.tagName("video")));
                 List<WebElement> sourceElements = videoElement.findElements(By.tagName("source"));
-                // if sourceElements is empty then the video url is in src attribute of video tag and required cookies to download
                 String videoUrl = sourceElements.isEmpty() ? videoElement.getAttribute("src") :
-                                        sourceElements.get(sourceElements.size()-1).getAttribute("src");
+                                        sourceElements.get(0).getAttribute("src");
                 if (videoUrl != null && !videoUrl.isBlank()) {
-                    String cookies = sourceElements.isEmpty() ? getCookiesString(webDriver) : "";
+                    String cookies = getCookiesString(webDriver);
                     VideoInfo videoInfo = createInfo(webDriver, fileName, href, view);
                     info.add(videoInfo);
                     logSuccess(videoInfo, dowloaded);
-                    downloadVideo(videoUrl, fileName, newDir, cookies);
-                    System.out.println("Attempt " + (i + 1) + " success!");
-                    break; // Exit the loop on success
+                    try{
+                        downloadVideo(videoUrl, fileName, newDir, cookies);
+                        System.out.println("Attempt " + (i + 1) + " success!");
+                        break; // Exit the loop on success
+                    } catch (SocketTimeoutException e) {
+                        System.out.println("Socket Timeout error in downloading video: " + videoUrl);
+                    } catch (IOException e2) {
+                        System.out.println("I/O error in downloading video: " + videoUrl);
+                    }
                 }
                 else {
                     System.err.println("No video found. Attempt " + (i + 1));
@@ -391,7 +397,7 @@ public class Main {
     }
 
     // Method to download video using HttpURLConnection
-    public void downloadVideo(String videoUrl, String fileName, File directory, String cookies) throws IOException, InterruptedException {
+    public void downloadVideo(String videoUrl, String fileName, File directory, String cookies) throws IOException {
 
         String filePath = directory.getAbsolutePath() + File.separator + fileName;
 
@@ -409,29 +415,24 @@ public class Main {
         long bufferSize = 1024 * 1024; // 1 MB buffer size
         long position = 0;
 
-        try (InputStream in = new BufferedInputStream(connection.getInputStream());
-             FileOutputStream fileOutputStream = new FileOutputStream(filePath)) {
+        InputStream in = new BufferedInputStream(connection.getInputStream());
+        FileOutputStream fileOutputStream = new FileOutputStream(filePath);
 
-            // Create a ReadableByteChannel from the InputStream
-            ReadableByteChannel readableByteChannel = Channels.newChannel(in);
+        // Create a ReadableByteChannel from the InputStream
+        ReadableByteChannel readableByteChannel = Channels.newChannel(in);
 
-            // Loop to transfer data in chunks until the entire file is downloaded
-            while (true) {
-                // Transfer up to 'bufferSize' bytes from the channel to the output stream
-                long transferred = fileOutputStream.getChannel().transferFrom(readableByteChannel, position, bufferSize);
+        // Loop to transfer data in chunks until the entire file is downloaded
+        while (true) {
+            // Transfer up to 'bufferSize' bytes from the channel to the output stream
+            long transferred = fileOutputStream.getChannel().transferFrom(readableByteChannel, position, bufferSize);
 
-                // Break the loop if no bytes were transferred (end of file reached)
-                if (transferred <= 0) break;
+            // Break the loop if no bytes were transferred (end of file reached)
+            if (transferred <= 0) break;
 
-                // Move the position forward by the number of bytes transferred
-                position += transferred;
-            }
-
-            System.out.println("Video downloaded successfully as " + filePath);
-
-        } catch (IOException e) {
-            System.err.println("Error downloading video: " + e.getMessage());
-            e.printStackTrace();
+            // Move the position forward by the number of bytes transferred
+            position += transferred;
         }
+
+        System.out.println("Video downloaded successfully as " + filePath);
     }
 }
