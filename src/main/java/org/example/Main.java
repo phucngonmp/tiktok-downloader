@@ -28,6 +28,15 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 
 public class Main {
+
+    private static final String XPATH_GET_LINK_TO_POST =  "//div[contains(@class, 'css-mmfnrb-DivWrapper') " +
+            "and contains(@class, 'e1cg0wnj1')]//a";
+    private static final String CSS_GET_VIEW_COUNT = "strong[data-e2e='video-views']";
+    private static final String XPATH_LATEST_BUTTON  = "//div[@class='TUXSegmentedControl-itemTitle' and text()='Popular']";
+    private static final String XPATH_POPULAR_BUTTON  = "//div[@class='TUXSegmentedControl-itemTitle' and text()='Latest']";
+    private static final String XPATH_OLDEST_BUTTON  = "//div[@class='TUXSegmentedControl-itemTitle' and text()='Oldest']";
+
+
     private WebDriver classDriver;
     private int threads = 5;
     private String name;
@@ -54,7 +63,7 @@ public class Main {
     public void setSaveLocation(String saveLocation) {
         this.saveLocation = saveLocation;
     }
-    public void setClassDriver(Boolean isHeadlessMode) {
+    public void setIsHeadlessMode(Boolean isHeadlessMode) {
         this.classDriver = newDriver(isHeadlessMode);
     }
     public void setThreads(int threads){this.threads = threads;}
@@ -172,33 +181,29 @@ public class Main {
     public void firstScan(String sortOption) throws InterruptedException {
         if(classDriver == null){
             classDriver = newDriver(true);
-            classDriver.get("https://www.tiktok.com/@" + name);
-        } else{
-            classDriver.get("https://www.tiktok.com/@" + name);
         }
+        classDriver.get("https://www.tiktok.com/@" + name);
         WebDriverWait wait = new WebDriverWait(classDriver, Duration.ofSeconds(5));
         if(sortOption.equals("popular")){
-            wait.until(ExpectedConditions.presenceOfElementLocated(By.xpath("//div[@class='TUXSegmentedControl-itemTitle' and text()='Popular']"))).click();
+            wait.until(ExpectedConditions.presenceOfElementLocated(By.xpath(XPATH_POPULAR_BUTTON))).click();
             System.out.println("clicked popular");
             Thread.sleep(3000);
         } else if(sortOption.equals("latest")){
-            wait.until(ExpectedConditions.presenceOfElementLocated(By.xpath("//div[@class='TUXSegmentedControl-itemTitle' and text()='Latest']"))).click();
+            wait.until(ExpectedConditions.presenceOfElementLocated(By.xpath(XPATH_LATEST_BUTTON))).click();
             System.out.println("clicked latest");
         } else{
-            wait.until(ExpectedConditions.presenceOfElementLocated(By.xpath("//div[@class='TUXSegmentedControl-itemTitle' and text()='Oldest']"))).click();
+            wait.until(ExpectedConditions.presenceOfElementLocated(By.xpath(XPATH_OLDEST_BUTTON))).click();
             Thread.sleep(3000);
         }
         Thread.sleep(2000);
         links = classDriver.findElements(
-                By.xpath("//div[contains(@class, 'css-1j167yi-DivWrapper') " +
-                    "and contains(@class, 'e1cg0wnj1')]//a"));
-        viewList = classDriver.findElements(By.cssSelector("strong[data-e2e='video-views']"));
+                By.xpath(XPATH_GET_LINK_TO_POST));
+        viewList = classDriver.findElements(By.cssSelector(CSS_GET_VIEW_COUNT));
         // if links is empty that mean the user is restricted make sure login with properly account
         if(links.isEmpty()){
             try {
                 loadCookiesFromFile(classDriver);
                 System.out.println("loaded your cookies");
-                firstScan(sortOption);
             } catch (IOException e) {
                 throw new RuntimeException(e);
             } catch (ClassNotFoundException e) {
@@ -212,8 +217,7 @@ public class Main {
         }
         try {
             links = classDriver.findElements(
-                    By.xpath("//div[contains(@class, 'css-1j167yi-DivWrapper') " +
-                            "and contains(@class, 'e1cg0wnj1')]//a"));
+                    By.xpath(XPATH_GET_LINK_TO_POST));
             viewList = classDriver.findElements(By.cssSelector("strong[data-e2e='video-views']"));
             long lastHeight = (long) ((JavascriptExecutor) classDriver).executeScript("return document.body.scrollHeight");
             int waitCount = 0;
@@ -223,8 +227,7 @@ public class Main {
                 // Wait for content to load
                 Thread.sleep(1500); // Adjust delay if needed
                 links = classDriver.findElements(
-                        By.xpath("//div[contains(@class, 'css-1j167yi-DivWrapper') " +
-                                "and contains(@class, 'e1cg0wnj1')]//a"));
+                        By.xpath(XPATH_GET_LINK_TO_POST));
                 viewList = classDriver.findElements(By.cssSelector("strong[data-e2e='video-views']"));
                 // Get the new height
                 long newHeight = (long) ((JavascriptExecutor) classDriver).executeScript("return document.body.scrollHeight");
@@ -251,7 +254,7 @@ public class Main {
     }
 
 
-    private void processDownloadVideo(List<VideoInfo> info, String href, int count, File newDir, String view, FileWriter error, FileWriter dowloaded) throws InterruptedException, IOException {
+    private void processDownloadVideo(List<VideoInfo> info, String href, int count, File newDir, String view, FileWriter error, FileWriter downloaded) throws InterruptedException, IOException {
         if (href.isBlank()) {
             return;
         }
@@ -272,7 +275,7 @@ public class Main {
                         downloadVideo(videoUrl, fileName, newDir, cookies);
                         System.out.println("Attempt " + (i + 1) + " success!");
                         info.add(videoInfo);
-                        logSuccess(videoInfo, dowloaded);
+                        logSuccess(videoInfo, downloaded);
                         break; // Exit the loop on success
                     } catch (SocketTimeoutException e) {
                         System.out.println("Socket Timeout error in downloading video: " + videoUrl);

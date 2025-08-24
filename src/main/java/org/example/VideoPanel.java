@@ -11,6 +11,7 @@ import java.io.File;
 import java.io.IOException;
 import java.time.Duration;
 import java.util.List;
+import java.util.UUID;
 
 public class VideoPanel extends JPanel {
 
@@ -62,8 +63,7 @@ public class VideoPanel extends JPanel {
                 return;
             }
             String url = urlTextField.getText();
-            String[] parts = url.split("/");
-            String filename = parts[parts.length-2]+ "-" +parts[parts.length - 1] + ".mp4";
+            String filename = UUID.randomUUID() + ".mp4";
             String saveLocation = locationTextField.getText();
             Main main = new Main();
             WebDriver webDriver = main.createAndGetDriver(true);

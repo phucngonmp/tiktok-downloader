@@ -87,7 +87,7 @@ public class UserPanel extends JPanel {
             public void actionPerformed(ActionEvent e) {
                 if(isFirstScan){
                     setEnable(true);
-                    main.setClassDriver(true);
+                    main.setIsHeadlessMode(true);
                     main.setName(usernameTextField.getText().trim());
                     try {
                         main.firstScan(getSortType());

@@ -12,22 +12,18 @@ import java.util.Set;
 
 public class LoginPanel extends JPanel {
     private static WebDriver driver = null;
-    private static LoginPanel loginPanel = null;
+    private static final LoginPanel LOGIN_PANEL = new LoginPanel();
     private static final JLabel note = new JLabel("Use this when you need to download restricted users or refresh cookies");
     private static final JLabel startLabel = new JLabel("Click Start Login to proceed to login manually");
     private static final JLabel endLabel = new JLabel("When finished, click Done to save the cookies");
     private static final JButton startButton = new JButton("Start Login");
     private static final JButton doneButton = new JButton("Done");
     public static LoginPanel getInstance() {
-        if (loginPanel == null) {
-            createUserPanel();
-        }
-        return loginPanel;
-    }
-    private static void createUserPanel() {
-        loginPanel = new LoginPanel();
-        loginPanel.setLayout(null);
         setUp();
+        return LOGIN_PANEL;
+    }
+    private LoginPanel() {
+        this.setLayout(null);
     }
 
     private static void setUp(){
@@ -50,14 +46,14 @@ public class LoginPanel extends JPanel {
                 throw new RuntimeException(ex);
             }
             driver.quit();
-            JOptionPane.showMessageDialog(loginPanel, "cookies saved");
+            JOptionPane.showMessageDialog(LOGIN_PANEL, "cookies saved");
         });
 
-        loginPanel.add(note);
-        loginPanel.add(startLabel);
-        loginPanel.add(startButton);
-        loginPanel.add(endLabel);
-        loginPanel.add(doneButton);
+        LOGIN_PANEL.add(note);
+        LOGIN_PANEL.add(startLabel);
+        LOGIN_PANEL.add(startButton);
+        LOGIN_PANEL.add(endLabel);
+        LOGIN_PANEL.add(doneButton);
     }
     private static void saveCookiesToFile(WebDriver driver, String filePath) throws IOException {
         Set<Cookie> cookies = driver.manage().getCookies();
