@@ -9,6 +9,9 @@ import org.openqa.selenium.*;
 import org.openqa.selenium.NoSuchElementException;
 import org.openqa.selenium.chrome.ChromeDriver;
 import org.openqa.selenium.chrome.ChromeOptions;
+import org.openqa.selenium.devtools.DevTools;
+import org.openqa.selenium.devtools.HasDevTools;
+import org.openqa.selenium.devtools.v139.network.Network;
 import org.openqa.selenium.support.ui.ExpectedConditions;
 import org.openqa.selenium.support.ui.WebDriverWait;
 import javax.swing.*;
@@ -20,16 +23,14 @@ import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
 import java.time.Duration;
 import java.util.*;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Semaphore;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
 
 public class Main {
 
-    private static final String XPATH_GET_LINK_TO_POST =  "//div[contains(@class, 'css-mmfnrb-DivWrapper') " +
+    private static final String XPATH_GET_LINK_TO_POST_1 = "//div[contains(@class, 'css-11t9sme-5e6d46e3--DivWrapper')]//a";
+    private static final String XPATH_GET_LINK_TO_POST_2 =  "//div[contains(@class, 'css-mmfnrb-DivWrapper') " +
             "and contains(@class, 'e1cg0wnj1')]//a";
     private static final String CSS_GET_VIEW_COUNT = "strong[data-e2e='video-views']";
     private static final String XPATH_LATEST_BUTTON  = "//div[@class='TUXSegmentedControl-itemTitle' and text()='Popular']";
@@ -80,7 +81,7 @@ public class Main {
         // Create ChromeOptions object to configure the browser
         ChromeOptions options = new ChromeOptions();
         if(isHeadlessMode){
-            options.addArguments("--headless");
+            options.addArguments("--headless=new");
         }
         // Disable the "AutomationControlled" flag
         options.addArguments("--disable-blink-features=AutomationControlled");
@@ -114,8 +115,8 @@ public class Main {
         ExecutorService executor = Executors.newFixedThreadPool(threads);
         AtomicInteger done = new AtomicInteger(0);
         for (int i = 0; i < total; i++) {
-            String href = links.get(i).getAttribute("href");
-            System.out.println(href);
+            String tiktokUrl = links.get(i).getAttribute("href");
+            System.out.println(tiktokUrl);
             String view = viewList.get(i).getText();
             System.out.println(view);
             int index = i + 1;
@@ -123,7 +124,7 @@ public class Main {
 
             executor.submit(() -> {
                 try {
-                    processDownloadVideo(info, href, index, newDir, view, error, downloaded);
+                    processDownloadVideo(info, tiktokUrl, index, newDir, view, error, downloaded);
                     int completed = done.incrementAndGet();
                     progressBar.setValue((int) (completed * 100 / finalTotal));
                 } catch (InterruptedException | IOException e) {
@@ -196,8 +197,10 @@ public class Main {
             Thread.sleep(3000);
         }
         Thread.sleep(2000);
-        links = classDriver.findElements(
-                By.xpath(XPATH_GET_LINK_TO_POST));
+        links = classDriver.findElements(By.xpath(XPATH_GET_LINK_TO_POST_1));
+        if(links.isEmpty()){
+            links = classDriver.findElements(By.xpath(XPATH_GET_LINK_TO_POST_2));
+        }
         viewList = classDriver.findElements(By.cssSelector(CSS_GET_VIEW_COUNT));
         // if links is empty that mean the user is restricted make sure login with properly account
         if(links.isEmpty()){
@@ -216,9 +219,6 @@ public class Main {
             return;
         }
         try {
-            links = classDriver.findElements(
-                    By.xpath(XPATH_GET_LINK_TO_POST));
-            viewList = classDriver.findElements(By.cssSelector("strong[data-e2e='video-views']"));
             long lastHeight = (long) ((JavascriptExecutor) classDriver).executeScript("return document.body.scrollHeight");
             int waitCount = 0;
             while (UserPanel.isScanning) {
@@ -226,8 +226,11 @@ public class Main {
 
                 // Wait for content to load
                 Thread.sleep(1500); // Adjust delay if needed
-                links = classDriver.findElements(
-                        By.xpath(XPATH_GET_LINK_TO_POST));
+                int oldSize = links.size();
+                links = classDriver.findElements(By.xpath(XPATH_GET_LINK_TO_POST_1));
+                if(links.size() == oldSize){
+                    links = classDriver.findElements(By.xpath(XPATH_GET_LINK_TO_POST_2));
+                }
                 viewList = classDriver.findElements(By.cssSelector("strong[data-e2e='video-views']"));
                 // Get the new height
                 long newHeight = (long) ((JavascriptExecutor) classDriver).executeScript("return document.body.scrollHeight");
@@ -254,21 +257,21 @@ public class Main {
     }
 
 
-    private void processDownloadVideo(List<VideoInfo> info, String href, int count, File newDir, String view, FileWriter error, FileWriter downloaded) throws InterruptedException, IOException {
-        if (href.isBlank()) {
+    private void processDownloadVideo(List<VideoInfo> info, String tiktokUrl, int count, File newDir, String view, FileWriter error, FileWriter downloaded) throws InterruptedException, IOException {
+        if (tiktokUrl.isBlank()) {
             return;
         }
-        final int MAX_RETRIES = 5;
+        final int MAX_RETRIES = 2;
         WebDriver webDriver = null;
         String fileName = "vid_" + count + ".mp4";
 
         for (int i = 0; i < MAX_RETRIES; i++) {
             try {
                 webDriver = newDriver(true);
-                webDriver.get(href);
-                String videoUrl = getVideoUrl(webDriver);
+                webDriver.get(tiktokUrl);
+                String videoUrl = getVideoUrl(webDriver, tiktokUrl);
                 String cookies = getCookiesString(webDriver);
-                VideoInfo videoInfo = createInfo(webDriver, fileName, href, view);
+                VideoInfo videoInfo = createInfo(webDriver, fileName, tiktokUrl, view);
                 webDriver.quit();
                 if (videoUrl != null && !videoUrl.isBlank()) {
                     try{
@@ -291,16 +294,53 @@ public class Main {
                 System.err.println("Error on attempt " + (i + 1) + ": " + e.getMessage());
             }
             if (i == MAX_RETRIES - 1) {
-                logError(fileName, error, href);
+                logError(fileName, error, tiktokUrl);
             }
         }
     }
-    public String getVideoUrl(WebDriver webDriver) {
-        WebDriverWait wait = new WebDriverWait(webDriver, Duration.ofSeconds(10));
-        WebElement videoElement = wait.until(ExpectedConditions.presenceOfElementLocated(By.tagName("video")));
-        List<WebElement> sourceElements = videoElement.findElements(By.tagName("source"));
-        return sourceElements.isEmpty() ? videoElement.getAttribute("src") :
-                    sourceElements.get(0).getAttribute("src");
+    public String getVideoUrl(WebDriver webDriver, String tiktokUrl) {
+        DevTools devTools = ((HasDevTools) webDriver).getDevTools();
+        devTools.createSession();
+        devTools.send(Network.enable(Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty()));
+
+        List<String> mediaUrls = new CopyOnWriteArrayList<>();
+
+        devTools.addListener(Network.responseReceived(), rr -> {
+            String url = rr.getResponse().getUrl();
+            String mime = rr.getResponse().getMimeType();
+            if ("video/mp4".equals(mime) && !url.contains("webapp/main/webapp-desktop")) {
+                System.out.println("[MEDIA][response] " + mime + "  " + url);
+                mediaUrls.add(url);
+            }
+        });
+
+        webDriver.get(tiktokUrl);
+
+        // wait up to 10 seconds for media URLs
+        long start = System.currentTimeMillis();
+        while (System.currentTimeMillis() - start < 10000) {
+            if (!mediaUrls.isEmpty()) break;
+            try { Thread.sleep(500); } catch (InterruptedException e) { throw new RuntimeException(e); }
+        }
+
+        System.out.println("==== Collected media URLs ====");
+        mediaUrls.stream().distinct().forEach(System.out::println);
+
+        if (mediaUrls.isEmpty()) return null;
+
+        // pick the longest URL
+        return mediaUrls.stream().max(Comparator.comparingInt(String::length)).orElse(null);
+    }
+
+
+    private boolean isMedia(String url, String mime) {
+        return isLikelyMedia(url) ||
+                (mime != null && mime.matches("(?i).*(video|mpegurl|mp2t|mp4|dash|application/vnd.apple.mpegurl).*"));
+    }
+    private boolean isLikelyMedia(String url) {
+        if (url == null) return false;
+        url = url.toLowerCase(Locale.ROOT);
+        return url.contains(".m3u8") || url.contains(".mpd") || url.contains(".mp4") || url.contains(".ts");
     }
     public String getCookiesString(WebDriver webDriver){
         StringBuilder cookiesString = new StringBuilder();
@@ -308,7 +348,7 @@ public class Main {
             cookiesString.append(cookie.getName()).append("=").append(cookie.getValue()).append("; ");
         }
 
-        if (cookiesString.length() > 0) {
+        if (!cookiesString.isEmpty()) {
             cookiesString.setLength(cookiesString.length() - 2);
         }
         return cookiesString.toString();

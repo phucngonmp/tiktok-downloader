@@ -67,12 +67,11 @@ public class VideoPanel extends JPanel {
             String saveLocation = locationTextField.getText();
             Main main = new Main();
             WebDriver webDriver = main.createAndGetDriver(true);
-            webDriver.get(url);
-            String videoUrl = main.getVideoUrl(webDriver);
+            String videoUrl = main.getVideoUrl(webDriver, url);
             if(videoUrl == null || videoUrl.isEmpty()){
                 try {
                     main.loadCookiesFromFile(webDriver);
-                    videoUrl = main.getVideoUrl(webDriver);
+                    videoUrl = main.getVideoUrl(webDriver, url);
                 } catch (IOException ex) {
                     throw new RuntimeException(ex);
                 } catch (ClassNotFoundException ex) {
