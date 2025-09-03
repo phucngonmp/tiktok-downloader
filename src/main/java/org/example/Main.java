@@ -32,6 +32,7 @@ public class Main {
     private static final String XPATH_GET_LINK_TO_POST_1 = "//div[contains(@class, 'css-11t9sme-5e6d46e3--DivWrapper')]//a";
     private static final String XPATH_GET_LINK_TO_POST_2 =  "//div[contains(@class, 'css-mmfnrb-DivWrapper') " +
             "and contains(@class, 'e1cg0wnj1')]//a";
+    private static String selectedXPath = null;
     private static final String CSS_GET_VIEW_COUNT = "strong[data-e2e='video-views']";
     private static final String XPATH_LATEST_BUTTON  = "//div[@class='TUXSegmentedControl-itemTitle' and text()='Popular']";
     private static final String XPATH_POPULAR_BUTTON  = "//div[@class='TUXSegmentedControl-itemTitle' and text()='Latest']";
@@ -198,8 +199,10 @@ public class Main {
         }
         Thread.sleep(2000);
         links = classDriver.findElements(By.xpath(XPATH_GET_LINK_TO_POST_1));
+        selectedXPath = XPATH_GET_LINK_TO_POST_1;
         if(links.isEmpty()){
             links = classDriver.findElements(By.xpath(XPATH_GET_LINK_TO_POST_2));
+            selectedXPath = XPATH_GET_LINK_TO_POST_2;
         }
         viewList = classDriver.findElements(By.cssSelector(CSS_GET_VIEW_COUNT));
         // if links is empty that mean the user is restricted make sure login with properly account
@@ -219,6 +222,8 @@ public class Main {
             return;
         }
         try {
+            links = classDriver.findElements(By.xpath(selectedXPath));
+            viewList = classDriver.findElements(By.cssSelector("strong[data-e2e='video-views']"));
             long lastHeight = (long) ((JavascriptExecutor) classDriver).executeScript("return document.body.scrollHeight");
             int waitCount = 0;
             while (UserPanel.isScanning) {
@@ -226,11 +231,7 @@ public class Main {
 
                 // Wait for content to load
                 Thread.sleep(1500); // Adjust delay if needed
-                int oldSize = links.size();
-                links = classDriver.findElements(By.xpath(XPATH_GET_LINK_TO_POST_1));
-                if(links.size() == oldSize){
-                    links = classDriver.findElements(By.xpath(XPATH_GET_LINK_TO_POST_2));
-                }
+                links = classDriver.findElements(By.xpath(selectedXPath));
                 viewList = classDriver.findElements(By.cssSelector("strong[data-e2e='video-views']"));
                 // Get the new height
                 long newHeight = (long) ((JavascriptExecutor) classDriver).executeScript("return document.body.scrollHeight");
