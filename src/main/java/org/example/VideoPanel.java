@@ -63,7 +63,8 @@ public class VideoPanel extends JPanel {
                 return;
             }
             String url = urlTextField.getText();
-            String filename = UUID.randomUUID() + ".mp4";
+            String[] temp = url.split("/");
+            String filename = temp[3] + "-" +  temp[5].replaceAll("[A-Za-z@?=]", "") + ".mp4";
             String saveLocation = locationTextField.getText();
             Main main = new Main();
             WebDriver webDriver = main.createAndGetDriver(true);

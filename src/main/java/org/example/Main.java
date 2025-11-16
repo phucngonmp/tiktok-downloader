@@ -29,14 +29,15 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 public class Main {
 
-    private static final String XPATH_GET_LINK_TO_POST_1 = "//div[contains(@class, 'css-11t9sme-5e6d46e3--DivWrapper')]//a";
+    private static final String XPATH_GET_LINK_TO_POST_1 = "//*[contains(@id, 'column-item-video-container')]//a";
     private static final String XPATH_GET_LINK_TO_POST_2 =  "//div[contains(@class, 'css-mmfnrb-DivWrapper') " +
             "and contains(@class, 'e1cg0wnj1')]//a";
+
     private static String selectedXPath = null;
     private static final String CSS_GET_VIEW_COUNT = "strong[data-e2e='video-views']";
-    private static final String XPATH_LATEST_BUTTON  = "//div[@class='TUXSegmentedControl-itemTitle' and text()='Popular']";
-    private static final String XPATH_POPULAR_BUTTON  = "//div[@class='TUXSegmentedControl-itemTitle' and text()='Latest']";
-    private static final String XPATH_OLDEST_BUTTON  = "//div[@class='TUXSegmentedControl-itemTitle' and text()='Oldest']";
+    private static final String XPATH_LATEST_BUTTON  = "//button[@aria-label='Latest']";
+    private static final String XPATH_POPULAR_BUTTON  = "//button[@aria-label='Popular']";
+    private static final String XPATH_OLDEST_BUTTON  = "//button[@aria-label='Oldest']";
 
 
     private WebDriver classDriver;
@@ -333,16 +334,6 @@ public class Main {
         return mediaUrls.stream().max(Comparator.comparingInt(String::length)).orElse(null);
     }
 
-
-    private boolean isMedia(String url, String mime) {
-        return isLikelyMedia(url) ||
-                (mime != null && mime.matches("(?i).*(video|mpegurl|mp2t|mp4|dash|application/vnd.apple.mpegurl).*"));
-    }
-    private boolean isLikelyMedia(String url) {
-        if (url == null) return false;
-        url = url.toLowerCase(Locale.ROOT);
-        return url.contains(".m3u8") || url.contains(".mpd") || url.contains(".mp4") || url.contains(".ts");
-    }
     public String getCookiesString(WebDriver webDriver){
         StringBuilder cookiesString = new StringBuilder();
         for (Cookie cookie : webDriver.manage().getCookies()) {
@@ -367,18 +358,15 @@ public class Main {
     private VideoInfo createInfo(WebDriver driver, String fileName, String link, String view){
         String hashtags = "";
         String music = "";
+        WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(3));
         try{
-            WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(1));
             WebElement musicElement = wait.until(ExpectedConditions.presenceOfElementLocated(
-                    By.cssSelector(".css-pvx3oa-DivMusicText.epjbyn3")));
+                    By.xpath("//h4[@data-e2e='browse-music']//a//div[contains(@class, 'DivMusicText')]")));
             music = musicElement.getText();
         } catch (Exception me){
             System.out.println("can't located music element");
         }
-        List<WebElement> hashtagElement = driver.findElements(By.cssSelector("a.css-sbcvet-StyledCommonLink strong"));
-        if(hashtagElement.isEmpty()){
-            hashtagElement = driver.findElements(By.cssSelector("a.css-sbcvet-StyledCommonLink strong"));
-        }
+        List<WebElement> hashtagElement = wait.until(ExpectedConditions.presenceOfAllElementsLocatedBy((By.xpath("//a [@data-e2e='search-common-link']//strong"))));
         for(WebElement e : hashtagElement){
             hashtags += e.getText() + " ";
         }
