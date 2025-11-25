@@ -87,7 +87,7 @@ public class UserPanel extends JPanel {
             public void actionPerformed(ActionEvent e) {
                 if(isFirstScan){
                     setEnable(true);
-                    main.setIsHeadlessMode(false);
+                    main.setIsHeadlessMode(true);
                     main.setName(usernameTextField.getText().trim());
                     try {
                         main.firstScan(getSortType());
@@ -158,7 +158,7 @@ public class UserPanel extends JPanel {
                         }
                         isFirstScan = false;
                     }
-                    main.setSaveLocation(locationTextField.getText());
+                    main.setRootLocation(locationTextField.getText());
                     setEnable(false);
                     SwingWorker<Void, Void> worker = new SwingWorker<>() {
                         @Override
@@ -189,8 +189,15 @@ public class UserPanel extends JPanel {
             }
         });
         resetButton.addActionListener(new ActionListener() {
+
             @Override
             public void actionPerformed(ActionEvent e) {
+                try {
+                    Runtime.getRuntime().exec("taskkill /F /IM chrome.exe /T");
+                    Runtime.getRuntime().exec("taskkill /F /IM chromedriver.exe /T");
+                } catch (IOException ex) {
+                    throw new RuntimeException(ex);
+                }
                 reset(main);
             }
         });

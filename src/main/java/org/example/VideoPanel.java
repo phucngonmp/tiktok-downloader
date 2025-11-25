@@ -25,8 +25,8 @@ public class VideoPanel extends JPanel {
 
     private static VideoPanel videoPanel = null;
 
-    public static VideoPanel getInstance(){
-        if(videoPanel == null){
+    public static VideoPanel getInstance() {
+        if (videoPanel == null) {
             createVideoPanel();
         }
         return videoPanel;
@@ -38,7 +38,8 @@ public class VideoPanel extends JPanel {
         videoPanel.setLayout(null);
         setUp();
     }
-    private static void setUp(){
+
+    private static void setUp() {
         urlLabel.setBounds(50, 120, 100, 30);
         urlTextField.setBounds(150, 120, 400, 30);
         locationLabel.setBounds(50, 180, 100, 30);
@@ -56,42 +57,56 @@ public class VideoPanel extends JPanel {
         videoPanel.add(browseButton);
         videoPanel.add(downloadButton);
     }
-    private static void addDownloadListener(){
+
+    private static void addDownloadListener() {
         downloadButton.addActionListener(e -> {
-            if(urlTextField.getText().isBlank()
-                    || locationTextField.getText().isBlank()){
+            if (urlTextField.getText().isBlank()
+                    || locationTextField.getText().isBlank()) {
                 return;
             }
-            String url = urlTextField.getText();
-            String[] temp = url.split("/");
-            String filename = temp[3] + "-" +  temp[5].replaceAll("[A-Za-z@?=]", "") + ".mp4";
-            String saveLocation = locationTextField.getText();
             Main main = new Main();
             WebDriver webDriver = main.createAndGetDriver(true);
-            String videoUrl = main.getVideoUrl(webDriver, url);
-            if(videoUrl == null || videoUrl.isEmpty()){
+            String saveLocation = locationTextField.getText();
+            String url = urlTextField.getText();
+            String[] temp = url.split("/");
+            String rootName = temp[3].replace("@", "") + "_" + temp[5].split("\\?")[0];
+
+            if (temp[4].equals("photo")) {
                 try {
-                    main.loadCookiesFromFile(webDriver);
-                    videoUrl = main.getVideoUrl(webDriver, url);
+                    webDriver.get(url);
+                    main.processDownloadPhoto(webDriver, new File(saveLocation, rootName));
                 } catch (IOException ex) {
                     throw new RuntimeException(ex);
-                } catch (ClassNotFoundException ex) {
+                }
+                JOptionPane.showMessageDialog(videoPanel, "download successfully at: " + saveLocation
+                        + "\\" + rootName);
+            } else {
+                String filename = rootName + ".mp4";
+                String videoUrl = main.getVideoUrl(webDriver, url);
+                if (videoUrl == null || videoUrl.isEmpty()) {
+                    main.loadCookiesFromFile(webDriver);
+                    videoUrl = main.getVideoUrl(webDriver, url);
+                    if (videoUrl == null || videoUrl.isEmpty()) {
+                        webDriver.quit();
+                        JOptionPane.showMessageDialog(videoPanel, "can not download this video");
+                        return;
+                    }
+                }
+                String cookies = main.getCookiesString(webDriver);
+                try {
+                    main.downloadVideo(videoUrl, filename, new File(saveLocation), cookies);
+                } catch (IOException ex) {
                     throw new RuntimeException(ex);
                 }
-            }
-            String cookies = main.getCookiesString(webDriver);
-            try {
-                main.downloadVideo(videoUrl, filename, new File(saveLocation), cookies);
-            } catch (IOException ex) {
-                throw new RuntimeException(ex);
+                JOptionPane.showMessageDialog(videoPanel, "download successfully at: " + saveLocation
+                        + "\\" + filename);
             }
             webDriver.quit();
-            JOptionPane.showMessageDialog(
-                    videoPanel, "download successfully at: " + saveLocation
-                    + "\\" + filename);
+
         });
     }
-    private static void addBrowseListener(){
+
+    private static void addBrowseListener() {
         browseButton.addActionListener(e -> {
             JFileChooser fileChooser = new JFileChooser();
             fileChooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);

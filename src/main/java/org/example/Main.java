@@ -7,13 +7,16 @@ import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.openqa.selenium.*;
 import org.openqa.selenium.NoSuchElementException;
+import org.openqa.selenium.TimeoutException;
 import org.openqa.selenium.chrome.ChromeDriver;
 import org.openqa.selenium.chrome.ChromeOptions;
 import org.openqa.selenium.devtools.DevTools;
 import org.openqa.selenium.devtools.HasDevTools;
+import org.openqa.selenium.devtools.v137.fetch.model.RequestId;
 import org.openqa.selenium.devtools.v139.network.Network;
 import org.openqa.selenium.support.ui.ExpectedConditions;
 import org.openqa.selenium.support.ui.WebDriverWait;
+
 import javax.swing.*;
 import java.io.*;
 import java.net.HttpURLConnection;
@@ -21,35 +24,41 @@ import java.net.SocketTimeoutException;
 import java.net.URL;
 import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 
 
 public class Main {
 
     private static final String XPATH_GET_LINK_TO_POST_1 = "//*[contains(@id, 'column-item-video-container')]//a";
-    private static final String XPATH_GET_LINK_TO_POST_2 =  "//div[contains(@class, 'css-mmfnrb-DivWrapper') " +
-            "and contains(@class, 'e1cg0wnj1')]//a";
+    private static final String XPATH_GET_LINK_TO_POST_2 = "//div[contains(@id, 'grid-item-container')]//a";
 
     private static String selectedXPath = null;
     private static final String CSS_GET_VIEW_COUNT = "strong[data-e2e='video-views']";
-    private static final String XPATH_LATEST_BUTTON  = "//button[@aria-label='Latest']";
-    private static final String XPATH_POPULAR_BUTTON  = "//button[@aria-label='Popular']";
-    private static final String XPATH_OLDEST_BUTTON  = "//button[@aria-label='Oldest']";
+    private static final String XPATH_LATEST_BUTTON = "//button[@aria-label='Latest']";
+    private static final String XPATH_POPULAR_BUTTON = "//button[@aria-label='Popular']";
+    private static final String XPATH_OLDEST_BUTTON = "//button[@aria-label='Oldest']";
 
 
     private WebDriver classDriver;
     private int threads = 5;
     private String name;
-    private String saveLocation;
+    private String rootLocation;
+    private File saveDirectory;
     private List<WebElement> links = null;
     private List<WebElement> viewList = null;
-    public Main(){
+
+    public Main() {
 
     }
-    public WebDriver createAndGetDriver(Boolean isHeadlessMode){
+
+    public WebDriver createAndGetDriver(Boolean isHeadlessMode) {
         classDriver = newDriver(isHeadlessMode);
         return classDriver;
     }
@@ -57,22 +66,30 @@ public class Main {
     public void setName(String name) {
         this.name = name;
     }
-    public String getName(){
+
+    public String getName() {
         return this.name;
     }
-    public List<WebElement> getViewList(){
+
+    public List<WebElement> getViewList() {
         return this.viewList;
     }
-    public void setSaveLocation(String saveLocation) {
-        this.saveLocation = saveLocation;
+
+    public void setRootLocation(String rootLocation) {
+        this.rootLocation = rootLocation;
     }
+
     public void setIsHeadlessMode(Boolean isHeadlessMode) {
         this.classDriver = newDriver(isHeadlessMode);
     }
-    public void setThreads(int threads){this.threads = threads;}
-    public void reset(){
+
+    public void setThreads(int threads) {
+        this.threads = threads;
+    }
+
+    public void reset() {
         name = null;
-        if(classDriver != null){
+        if (classDriver != null) {
             classDriver.quit();
             classDriver = null;
         }
@@ -82,7 +99,7 @@ public class Main {
         WebDriverManager.chromedriver().setup();
         // Create ChromeOptions object to configure the browser
         ChromeOptions options = new ChromeOptions();
-        if(isHeadlessMode){
+        if (isHeadlessMode) {
             options.addArguments("--headless=new");
         }
         // Disable the "AutomationControlled" flag
@@ -97,19 +114,14 @@ public class Main {
         options.setExperimentalOption("useAutomationExtension", false);
 
         options.addArguments("--disable-notifications");
-        WebDriver webDriver = new ChromeDriver(options);
-
-        return webDriver;
+        return new ChromeDriver(options);
     }
+
     public void main(double downloadOption, JProgressBar progressBar) throws IOException, InterruptedException {
-        File newDir = new File(saveLocation + "\\" + name);
-        if (!newDir.exists()) {
-            newDir.mkdirs();  // Creates the directory if it doesn't exist
+        saveDirectory = new File(rootLocation + "\\" + name);
+        if (!saveDirectory.exists()) {
+            saveDirectory.mkdirs();  // Creates the directory if it doesn't exist
         }
-        File errorFile = new File(newDir,  "error.txt");
-        FileWriter error = new FileWriter(errorFile);
-        File downloadedFile = new File(newDir,  "downloaded.txt");
-        FileWriter downloaded = new FileWriter(downloadedFile);
         int total = getTotalDownloadVideos(downloadOption);
 
         System.out.println("total videos: " + total);
@@ -117,25 +129,23 @@ public class Main {
         ExecutorService executor = Executors.newFixedThreadPool(threads);
         AtomicInteger done = new AtomicInteger(0);
         for (int i = 0; i < total; i++) {
-            String tiktokUrl = links.get(i).getAttribute("href");
-            System.out.println(tiktokUrl);
+            String postUrl = links.get(i).getAttribute("href");
+            System.out.println(postUrl);
             String view = viewList.get(i).getText();
             System.out.println(view);
             int index = i + 1;
-            double finalTotal = total;
-
             executor.submit(() -> {
                 try {
-                    processDownloadVideo(info, tiktokUrl, index, newDir, view, error, downloaded);
+                    processDownloadVideos(info, postUrl, index, view);
                     int completed = done.incrementAndGet();
-                    progressBar.setValue((int) (completed * 100 / finalTotal));
+                    progressBar.setValue((int) (completed * 100 / total));
                 } catch (InterruptedException | IOException e) {
                     throw new RuntimeException(e);
                 }
             });
         }
 
-// Shutdown the executor after all tasks are submitted
+        // Shutdown the executor after all tasks are submitted
         executor.shutdown();
 
 
@@ -148,14 +158,13 @@ public class Main {
             e.printStackTrace();
         }
         // sort by views
-        Collections.sort(info,Comparator.comparing((VideoInfo v) -> extractNumber(v.getView())).reversed());
+        info.sort(Comparator.comparing((VideoInfo v) -> extractNumber(v.getView())).reversed());
         exportExcel(info);
         System.out.println("done");
-        downloaded.close();
-        error.close();
         classDriver.quit();
         classDriver = null;
     }
+
     private int extractNumber(String view) {
         try {
             if (view.endsWith("K")) {
@@ -170,11 +179,12 @@ public class Main {
             return 0;
         }
     }
-    public int getTotalDownloadVideos(double downloadOption){
+
+    public int getTotalDownloadVideos(double downloadOption) {
         double total = links.size();
-        if(downloadOption <= 1){
+        if (downloadOption <= 1) {
             total = Math.ceil(total * downloadOption);
-        } else if(downloadOption < total){
+        } else if (downloadOption < total) {
             total = downloadOption;
         }
         return (int) total;
@@ -182,44 +192,34 @@ public class Main {
 
     // first scan mean make webdriver find sort by popular or latest or oldest and do one scan
     public void firstScan(String sortOption) throws InterruptedException {
-        if(classDriver == null){
+        if (classDriver == null) {
             classDriver = newDriver(true);
         }
         classDriver.get("https://www.tiktok.com/@" + name);
-        WebDriverWait wait = new WebDriverWait(classDriver, Duration.ofSeconds(5));
-        if(sortOption.equals("popular")){
+        loadCookiesFromFile(classDriver);
+        classDriver.navigate().refresh();
+        WebDriverWait wait = new WebDriverWait(classDriver, Duration.ofSeconds(10));
+        if (sortOption.equals("popular")) {
             wait.until(ExpectedConditions.presenceOfElementLocated(By.xpath(XPATH_POPULAR_BUTTON))).click();
             System.out.println("clicked popular");
-            Thread.sleep(3000);
-        } else if(sortOption.equals("latest")){
+        } else if (sortOption.equals("latest")) {
             wait.until(ExpectedConditions.presenceOfElementLocated(By.xpath(XPATH_LATEST_BUTTON))).click();
             System.out.println("clicked latest");
-        } else{
+        } else {
             wait.until(ExpectedConditions.presenceOfElementLocated(By.xpath(XPATH_OLDEST_BUTTON))).click();
-            Thread.sleep(3000);
         }
-        Thread.sleep(2000);
+        Thread.sleep(3000);
         links = classDriver.findElements(By.xpath(XPATH_GET_LINK_TO_POST_1));
         selectedXPath = XPATH_GET_LINK_TO_POST_1;
-        if(links.isEmpty()){
+        if (links.isEmpty()) {
             links = classDriver.findElements(By.xpath(XPATH_GET_LINK_TO_POST_2));
             selectedXPath = XPATH_GET_LINK_TO_POST_2;
         }
         viewList = classDriver.findElements(By.cssSelector(CSS_GET_VIEW_COUNT));
-        // if links is empty that mean the user is restricted make sure login with properly account
-        if(links.isEmpty()){
-            try {
-                loadCookiesFromFile(classDriver);
-                System.out.println("loaded your cookies");
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            } catch (ClassNotFoundException e) {
-                throw new RuntimeException(e);
-            }
-        }
     }
-    public void scanVideo(JLabel totalVideoLabel){
-        if(classDriver == null){
+
+    public void scanVideo(JLabel totalVideoLabel) {
+        if (classDriver == null) {
             return;
         }
         try {
@@ -242,7 +242,7 @@ public class Main {
                 if (newHeight == lastHeight) {
                     waitCount++;
                 }
-                if(waitCount == 3){
+                if (waitCount == 3) {
                     System.out.println("Reached the bottom of the page.");
                     break;
                 }
@@ -253,88 +253,107 @@ public class Main {
             Thread.currentThread().interrupt(); // Restore interrupt status
             e.printStackTrace();
         }
-        if(links.isEmpty()){
+        if (links.isEmpty()) {
             System.out.println("can't find videos");
         }
     }
 
+    private boolean isPostUrlPhotoType(String postUrl) {
+        return postUrl.split("/")[4].equals("photo");
+    }
 
-    private void processDownloadVideo(List<VideoInfo> info, String tiktokUrl, int count, File newDir, String view, FileWriter error, FileWriter downloaded) throws InterruptedException, IOException {
-        if (tiktokUrl.isBlank()) {
-            return;
-        }
-        final int MAX_RETRIES = 2;
-        WebDriver webDriver = null;
-        String fileName = "vid_" + count + ".mp4";
-
-        for (int i = 0; i < MAX_RETRIES; i++) {
-            try {
-                webDriver = newDriver(true);
-                webDriver.get(tiktokUrl);
-                String videoUrl = getVideoUrl(webDriver, tiktokUrl);
-                String cookies = getCookiesString(webDriver);
-                VideoInfo videoInfo = createInfo(webDriver, fileName, tiktokUrl, view);
-                webDriver.quit();
-                if (videoUrl != null && !videoUrl.isBlank()) {
-                    try{
-                        downloadVideo(videoUrl, fileName, newDir, cookies);
-                        System.out.println("Attempt " + (i + 1) + " success!");
-                        info.add(videoInfo);
-                        logSuccess(videoInfo, downloaded);
-                        break; // Exit the loop on success
-                    } catch (SocketTimeoutException e) {
-                        System.out.println("Socket Timeout error in downloading video: " + videoUrl);
-                    } catch (IOException e2) {
-                        System.out.println("I/O error in downloading video: " + videoUrl);
-                    }
-                }
-                else {
-                    System.err.println("No video found. Attempt " + (i + 1));
-                }
-
-            } catch (Exception e) {
-                System.err.println("Error on attempt " + (i + 1) + ": " + e.getMessage());
+    public void processDownloadPhoto(WebDriver webDriver, File photoDirectory) throws IOException {
+        try {
+            List<WebElement> imageElements = webDriver.findElements(By.xpath("//div[contains(@class, 'swiper-slide')]//img"));
+            List<String> imageUrls = imageElements.stream().map(element -> element.getAttribute("src")).toList();
+            // download images
+            for (int i = 0; i < imageUrls.size() / 3; i++) {
+                downloadImage(imageUrls.get(i), new File(photoDirectory, "photo_" + i + ".jpg"));
+                System.out.println("downloaded image " + imageUrls.get(i));
             }
-            if (i == MAX_RETRIES - 1) {
-                logError(fileName, error, tiktokUrl);
-            }
+            // download audio
+            String audioUrl = webDriver.findElement(By.xpath("//audio")).getAttribute("src");
+            downloadVideo(audioUrl, "audio.mp3", photoDirectory, "");
+        } catch (Exception e) {
+            System.out.println(e.getMessage());
         }
     }
-    public String getVideoUrl(WebDriver webDriver, String tiktokUrl) {
+
+    private void processDownloadVideos(List<VideoInfo> info, String postUrl, int count, String view) throws InterruptedException, IOException {
+        // files contain log
+        File errorFile = new File(saveDirectory, "error.txt");
+        FileWriter error = new FileWriter(errorFile, true);
+        File downloadedFile = new File(saveDirectory, "downloaded.txt");
+        FileWriter downloaded = new FileWriter(downloadedFile, true);
+        if (postUrl.isBlank()) {
+            return;
+        }
+        WebDriver webDriver = null;
+        String fileName = "vid_" + count + ".mp4";
+        try {
+            webDriver = newDriver(true);
+            VideoInfo videoInfo;
+            if (isPostUrlPhotoType(postUrl)) {
+                webDriver.get(postUrl);
+                fileName = "photo_" + count;
+                videoInfo = createInfo(webDriver, fileName, view);
+                try{
+                    processDownloadPhoto(webDriver, new File(saveDirectory, fileName));
+                } catch (Exception e){
+                    logError(fileName, error, postUrl);
+                }
+            } else {
+                String videoUrl = getVideoUrl(webDriver, postUrl);
+                videoInfo = createInfo(webDriver, fileName, view);
+                String cookies = getCookiesString(webDriver);
+                try {
+                    downloadVideo(videoUrl, fileName, saveDirectory, cookies);
+                } catch (Exception e) {
+                    logError(fileName, error, postUrl);
+                }
+            }
+            info.add(videoInfo);
+            logSuccess(videoInfo, downloaded);
+        } finally {
+            downloaded.close();
+            error.close();
+            if (webDriver != null) {
+                webDriver.quit();
+            }
+        }
+
+    }
+
+    public String getVideoUrl(WebDriver webDriver, String postUrl) {
         DevTools devTools = ((HasDevTools) webDriver).getDevTools();
         devTools.createSession();
         devTools.send(Network.enable(Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty()));
+        devTools.send(Network.setBlockedURLs(
+                Collections.singletonList("https://www.tiktok.com/api/*")
+        ));
+        CompletableFuture<String> videoUrlFuture = new CompletableFuture<>();
+        devTools.addListener(Network.requestWillBeSent(), rr -> {
+            String url = rr.getRequest().getUrl();
 
-        List<String> mediaUrls = new CopyOnWriteArrayList<>();
-
-        devTools.addListener(Network.responseReceived(), rr -> {
-            String url = rr.getResponse().getUrl();
-            String mime = rr.getResponse().getMimeType();
-            if ("video/mp4".equals(mime) && !url.contains("webapp/main/webapp-desktop")) {
-                System.out.println("[MEDIA][response] " + mime + "  " + url);
-                mediaUrls.add(url);
+            if (url.startsWith("https://v16-webapp-prime.tiktok.com/") ||
+                    url.startsWith("https://v19-webapp-prime.tiktok.com/")) {
+                videoUrlFuture.complete(url);
             }
         });
 
-        webDriver.get(tiktokUrl);
-
-        // wait up to 10 seconds for media URLs
-        long start = System.currentTimeMillis();
-        while (System.currentTimeMillis() - start < 10000) {
-            if (!mediaUrls.isEmpty()) break;
-            try { Thread.sleep(500); } catch (InterruptedException e) { throw new RuntimeException(e); }
+        webDriver.get(postUrl);
+        try {
+            return videoUrlFuture.get(10, TimeUnit.SECONDS);
+        } catch (Exception e) {
+            System.out.println("Video URL not found within timeout.");
+            return null;
+        } finally {
+            devTools.clearListeners();
+            devTools.send(Network.disable());
         }
-
-        System.out.println("==== Collected media URLs ====");
-        mediaUrls.stream().distinct().forEach(System.out::println);
-
-        if (mediaUrls.isEmpty()) return null;
-
-        // pick the longest URL
-        return mediaUrls.stream().max(Comparator.comparingInt(String::length)).orElse(null);
     }
 
-    public String getCookiesString(WebDriver webDriver){
+    public String getCookiesString(WebDriver webDriver) {
         StringBuilder cookiesString = new StringBuilder();
         for (Cookie cookie : webDriver.manage().getCookies()) {
             cookiesString.append(cookie.getName()).append("=").append(cookie.getValue()).append("; ");
@@ -345,6 +364,7 @@ public class Main {
         }
         return cookiesString.toString();
     }
+
     private void logSuccess(VideoInfo videoInfo, FileWriter writer) throws IOException {
         writer.write(videoInfo.toString() + "\n");
         writer.flush();
@@ -352,52 +372,55 @@ public class Main {
 
     private void logError(String fileName, FileWriter writer, String href) throws IOException {
         System.out.println("this video get some error: " + href);
-        writer.write(fileName + ": "+ href + "\n");
+        writer.write(fileName + ": " + href + "\n");
         writer.flush();
     }
-    private VideoInfo createInfo(WebDriver driver, String fileName, String link, String view){
-        String hashtags = "";
-        String music = "";
-        WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(3));
-        try{
-            WebElement musicElement = wait.until(ExpectedConditions.presenceOfElementLocated(
-                    By.xpath("//h4[@data-e2e='browse-music']//a//div[contains(@class, 'DivMusicText')]")));
-            music = musicElement.getText();
-        } catch (Exception me){
-            System.out.println("can't located music element");
-        }
-        List<WebElement> hashtagElement = wait.until(ExpectedConditions.presenceOfAllElementsLocatedBy((By.xpath("//a [@data-e2e='search-common-link']//strong"))));
-        for(WebElement e : hashtagElement){
-            hashtags += e.getText() + " ";
-        }
-        List<WebElement> titlesElement = null;
-        String title = "";
-        try{
-            titlesElement = driver.findElements(By.cssSelector("span[data-e2e='new-desc-span']"));
-            title = titlesElement.get(0).getText();
-        }catch (Exception e){
 
-        }
-        String like;
-        String comment;
+    private String tryGetText(WebDriver driver, String xpath1, String xpath2) {
         try {
-            like = driver.findElement(By.cssSelector("strong[data-e2e='browse-like-count']")).getText();
-            comment = driver.findElement(By.cssSelector("strong[data-e2e='browse-comment-count']")).getText();
-        } catch (NoSuchElementException e) {
-            try{
-                like = driver.findElement(By.cssSelector("strong[data-e2e='like-count']")).getText();
-                comment = driver.findElement(By.cssSelector("strong[data-e2e='comment-count']")).getText();
-            }catch (NoSuchElementException ex){
-                like = "";
-                comment = "";
-            };
+            String text = driver.findElement(By.xpath(xpath1)).getText().trim();
+            if (!text.isEmpty()) return text;
+        } catch (Exception ignored) {}
+
+        try {
+            String text = driver.findElement(By.xpath(xpath2)).getText().trim();
+            if (!text.isEmpty()) return text;
+        } catch (Exception ignored) {}
+        return "";
+    }
+
+    private VideoInfo createInfo(WebDriver driver, String fileName, String view) {
+        String music = tryGetText(
+                driver,
+                "//p[contains(@class, 'StyledMusicText ')]",
+                "//h4[@data-e2e='browse-music']//a//div[contains(@class, 'DivMusicText')]");
+        String title = tryGetText(
+                driver,
+                "//span[@data-e2e='desc-span-0_-1']",
+                "//span[@data-e2e='new-desc-span']");
+        String like = tryGetText(
+                driver,
+                "//strong[@data-e2e='like-count']",
+                "//strong[@data-e2e='browse-like-count']");
+        String comment = tryGetText(
+                driver,
+                "//strong[@data-e2e='comment-count']",
+                "//strong[@data-e2e='browse-comment-count']");
+        String link = driver.getCurrentUrl();
+        String hashtags = "";
+        List<WebElement> list1 = driver.findElements(By.xpath("//a[@data-e2e='search-common-link']//p"));
+        List<WebElement> list2 = driver.findElements(By.xpath("//a[@data-e2e='search-common-link']//strong"));
+        if (!list1.isEmpty()) {
+            for (WebElement e : list1) hashtags += e.getText() + " ";
+        } else if (!list2.isEmpty()) {
+            for (WebElement e : list2) hashtags += e.getText() + " ";
         }
         return new VideoInfo(fileName, link, view, like, comment, title, hashtags, music);
     }
 
 
     private void exportExcel(List<VideoInfo> info) throws IOException {
-        File file = new File(saveLocation + "\\" + name + "\\info.xlsx");
+        File file = new File(rootLocation + "\\" + name + "\\info.xlsx");
         Workbook workbook;
         if (file.exists()) {
             // Load existing workbook
@@ -449,10 +472,45 @@ public class Main {
         }
     }
 
-    // Method to download video using HttpURLConnection
-    public void downloadVideo(String videoUrl, String fileName, File directory, String cookies) throws IOException {
+    private void downloadImage(String imageUrl, File destinationFile) {
+        try {
+            URL url = new URL(imageUrl);
 
-        String filePath = directory.getAbsolutePath() + File.separator + fileName;
+            // 1. Open the connection
+            HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+
+            // 2. CRITICAL: Fake a browser User-Agent to avoid 403 Forbidden errors
+            connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36");
+            connection.setConnectTimeout(5000); // 5 seconds timeout
+            connection.setReadTimeout(5000);
+
+            // 3. Check if the request was successful
+            int responseCode = connection.getResponseCode();
+            if (responseCode == HttpURLConnection.HTTP_OK) {
+
+                // 4. Ensure the parent directory exists before writing
+                File parentDir = destinationFile.getParentFile();
+                if (parentDir != null && !parentDir.exists()) {
+                    parentDir.mkdirs();
+                }
+
+                // 5. Stream the data to the file
+                try (InputStream in = connection.getInputStream()) {
+                    Files.copy(in, destinationFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
+                }
+            } else {
+                System.out.println("[ERROR] Server returned code: " + responseCode + " for URL: " + imageUrl);
+            }
+
+        } catch (IOException e) {
+            System.out.println("[EXCEPTION] Failed to download image: " + e.getMessage());
+        }
+    }
+
+    // Method to download video using HttpURLConnection
+    public void downloadVideo(String videoUrl, String fileName, File saveDirectory, String cookies) throws IOException {
+
+        String filePath = saveDirectory.getAbsolutePath() + File.separator + fileName;
 
         URL url = new URL(videoUrl);
         HttpURLConnection connection = (HttpURLConnection) url.openConnection();
@@ -460,7 +518,7 @@ public class Main {
         connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/78.0.3904.97 Safari/537.36");
         connection.setConnectTimeout(5000);
         connection.setReadTimeout(5000);
-        if(!cookies.isBlank())
+        if (!cookies.isBlank())
             connection.setRequestProperty("Cookie", cookies);
 
 
@@ -488,12 +546,30 @@ public class Main {
 
         System.out.println("Video downloaded successfully as " + filePath);
     }
-    public void loadCookiesFromFile(WebDriver driver) throws IOException, ClassNotFoundException {
-        try (ObjectInputStream ois = new ObjectInputStream(new FileInputStream("user_cookies.dat"))) {
+
+    public void loadCookiesFromFile(WebDriver driver) {
+        File file = new File("user_cookies.dat");
+
+        if (!file.exists()) {
+            System.out.println("cookie file not found, creating empty file...");
+            try {
+                file.createNewFile();  // creates empty file
+            } catch (IOException e) {
+                System.out.println("Failed to create cookie file");
+            }
+            return; // nothing to load
+        }
+
+        System.out.println("loaded your cookies");
+
+        try (ObjectInputStream ois = new ObjectInputStream(new FileInputStream(file))) {
             Set<Cookie> cookies = (Set<Cookie>) ois.readObject();
             for (Cookie cookie : cookies) {
                 driver.manage().addCookie(cookie);
             }
+        } catch (Exception e) {
+            System.out.println("Error loading cookies: " + e.getMessage());
         }
     }
+
 }
